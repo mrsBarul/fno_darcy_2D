@@ -1,273 +1,74 @@
-```markdown
-# Fourier Neural Operator (FNO) for Pressure Field Prediction
+# Fourier Neural Operator (FNO) для предсказания поля давления
 
-## 1. Project Overview
+## 1. О проекте
 
-This project implements a **Fourier Neural Operator (FNO)** for learning the mapping between permeability and pressure fields in a 2D porous medium.
+Этот проект реализует Fourier Neural Operator (FNO) для обучения отображению между полем проницаемости и полем давления в двумерной пористой среде.
 
-The model learns a nonlinear operator:
+Модель обучает нелинейный оператор G: a(x) → u(x), где a(x) — поле проницаемости, u(x) — поле давления. Цель — приблизить оператор решения дифференциального уравнения в частных производных с помощью обучения на данных.
 
-G: a(x) → u(x)
+## 2. Физическая постановка задачи
 
-where:
-- a(x) — permeability field
-- u(x) — pressure field
+Базовая физическая модель описывается уравнением Дарси: −∇ · (a(x) ∇u(x)) = f(x), x ∈ Ω, где Ω — двумерная область, a(x) — пространственная проницаемость, u(x) — давление. Важно: ДУЧП не решается внутри нейронной сети, датасет уже содержит численные решения, модель изучает отображение a(x) → u(x).
 
-The goal is to approximate the solution operator of a PDE using data-driven learning.
+## 3. Структура проекта
 
----
+project/ содержит fno_experiment.py (обучение и эксперименты), check_data.py (анализ и визуализация данных), utilities3.py (загрузка данных, нормализация, функции потерь), training_plots/ (графики обучения и результаты), dataset_visualization/ (визуализация датасетов) и README.md.
 
-## 2. Physical Problem Statement
+Ссылка на датасеты: https://yaleedu-my.sharepoint.com/personal/lu_lu_yale_edu/_layouts/15/onedrive.aspx?id=%2Fpersonal%2Flu_lu_yale_edu%2FDocuments%2Fdatasets%2F2022_CMAME_Lu%2FDarcy_rectangular_PWC&viewid=e10cdfb7-ffdd-44de-b905-4560554a8b8f
 
-The underlying physical model corresponds to the Darcy equation:
+## 4. Описание датасета
 
-−∇ · (a(x) ∇u(x)) = f(x),   x ∈ Ω
+Используются два файла: piececonst_r421_N1024_smooth1.mat и piececonst_r421_N1024_smooth2.mat. Каждый образец содержит coeff (поле проницаемости a(x)) и sol (поле давления u(x)). Разрешение сетки: исходное 421 × 421, после даунсемплинга 29 × 29.
 
-where:
-- Ω is a 2D spatial domain
-- a(x) is spatial permeability
-- u(x) is pressure
+## 5. Анализ данных (check_data.py)
 
-Important note:
-- The PDE is NOT solved inside the neural network
-- The dataset already contains numerical solutions
-- The model learns the mapping (a(x) → u(x))
+Скрипт выполняет загрузку MAT-файлов, проверку размерностей тензоров, сравнение статистик датасетов, вычисление абсолютных разностей, визуализацию полей и распределений. Результат: dataset_visualization/datasets_comparison.png.
 
----
+## 6. Модель: Fourier Neural Operator (FNO)
 
-## 3. Project Structure
+Модель основана на спектральной свертке с использованием БПФ. Основные компоненты: преобразование Фурье (FFT), обучаемые спектральные веса, обратное преобразование Фурье (IFFT), остаточные соединения (Conv1D), полносвязные слои.
 
-project/
-│
-├── fno_experiment.py          # training and experiments
-├── check_data.py              # dataset analysis and visualization
-├── utilities3.py              # data loading, normalization, losses
-│
-├── ...                        # datasets - нужно скачать
-https://yaleedu-my.sharepoint.com/personal/lu_lu_yale_edu/_layouts/15/onedrive.aspx?id=%2Fpersonal%2Flu_lu_yale_edu%2FDocuments%2Fdatasets%2F2022_CMAME_Lu%2FDarcy_rectangular_PWC&viewid=e10cdfb7-ffdd-44de-b905-4560554a8b8f 
-│
-├── training_plots/            # training curves and results
-├── dataset_visualization/     # dataset inspection plots
-└── README.md
+## 7. Архитектура
 
----
+Вход (a(x) и пространственные координаты) → линейное вложение (3 → width) → слои FNO (FFT → спектральная фильтрация → IFFT + остаточная ветвь) → полносвязные слои → выход u(x).
 
-## 4. Dataset Description
+## 8. Частотный анализ (FFT)
 
-Two datasets are used:
+Проект включает спектральный анализ полей давления: 2D БПФ (fft2), сдвиг спектра (fftshift), логарифмический спектр. Визуализируются полный частотный спектр, низкочастотная и высокочастотная структуры. Результат: training_plots/*_fft.png.
 
-- piececonst_r421_N1024_smooth1.mat
-- piececonst_r421_N1024_smooth2.mat
+## 9. Процесс обучения
 
-Each sample contains:
+Настройки оптимизации: оптимизатор Adam, планировщик StepLR, функция потерь MSE + относительная L2-ошибка. Отслеживаемые метрики: MSE на обучении, относительная L2-ошибка (обучение/тест).
 
-- coeff → permeability field a(x)
-- sol → pressure field u(x)
+## 10. Графики обучения
 
-Grid resolution:
-- Original: 421 × 421
-- Downsampled: 29 × 29
+Сохраняются в training_plots/<имя_эксперимента>_loss.png. Включают MSE потерю (обучение) и L2 ошибку (тест).
 
----
+## 11. Эксперименты
 
-## 5. Data Analysis (check_data.py)
+Сравниваются следующие конфигурации: Baseline, Layers_2, Layers_6, Width_64, Modes_8. Цель: анализ влияния глубины, ширины и чувствительности к спектральным модам.
 
-The script performs:
+## 12. Визуализация предсказаний
 
-- loading MAT files
-- checking tensor shapes
-- comparing dataset statistics
-- computing absolute differences
-- visualizing fields and distributions
+Для каждого эксперимента визуализируются входное поле (проницаемость + координаты), реальное поле давления и предсказанное поле давления. Сохраняются в training_plots/.
 
-Outputs:
+## 13. Метрики
 
-dataset_visualization/datasets_comparison.png
-
----
-
-## 6. Model: Fourier Neural Operator (FNO)
-
-The model is based on spectral convolution using FFT.
-
-Main components:
-- Fourier transform (FFT)
-- learnable spectral weights
-- inverse FFT
-- residual connections (Conv1D)
-- fully connected layers
-
----
-
-## 7. Architecture
-
-Input:
-(a(x), spatial coordinates)
-
-↓
-Linear embedding (3 → width)
-
-↓
-FNO layers:
-    FFT → spectral filtering → IFFT
-    + residual branch
-
-↓
-Fully Connected layers
-
-↓
-Output:
-u(x)
-
----
-
-## 8. Frequency Analysis (FFT)
-
-The project includes spectral analysis of pressure fields:
-
-Operations:
-- 2D FFT (fft2)
-- frequency shift (fftshift)
-- log magnitude spectrum
-
-Visualized components:
-- full frequency spectrum
-- low-frequency structure
-- high-frequency components
-
-Outputs:
-
-training_plots/*_fft.png
-
----
-
-## 9. Training Procedure
-
-Optimization setup:
-- Optimizer: Adam
-- Scheduler: StepLR
-- Loss: MSE + L2 relative error
-
-Tracked metrics:
-- training MSE
-- relative L2 error (train/test)
-
----
-
-## 10. Training Curves
-
-Saved in:
-
-training_plots/<experiment_name>_loss.png
-
-Includes:
-- MSE loss (training)
-- L2 error (test)
-
----
-
-## 11. Experiments
-
-The following configurations are compared:
-
-- Baseline
-- Layers_2
-- Layers_6
-- Width_64
-- Modes_8
-
-Purpose:
-- analyze depth impact
-- analyze width impact
-- analyze spectral modes sensitivity
-
----
-
-## 12. Prediction Visualization
-
-For each experiment:
-
-- input field (permeability + coordinates)
-- ground truth pressure
-- predicted pressure
-
-Saved in:
-
-training_plots/
-
----
-
-## 13. Metrics
-
-Main metrics:
-
-### L2 Relative Error
-Measures relative reconstruction error between fields.
-
-### MSE
-Pointwise reconstruction error.
-
----
+L2 Relative Error — относительная ошибка реконструкции между полями. MSE — поэлементная ошибка реконструкции.
 
 ## 14. utilities3.py
 
-Contains:
+Содержит: MatReader (загрузчик MAT-файлов), UnitGaussianNormalizer (нормализация), LpLoss (относительная Lp ошибка), HsLoss (Sobolev-тип потери), DenseNet (полносвязный бейзлайн), count_params (счетчик параметров).
 
-- MatReader — dataset loader (MAT files)
-- UnitGaussianNormalizer — normalization
-- LpLoss — relative Lp error
-- HsLoss — Sobolev-type loss
-- DenseNet — fully connected baseline
-- count_params — parameter counter
+## 15. Ключевая идея
 
----
+Вместо изучения функции модель изучает оператор Gθ: a(x) → u(x), что соответствует изучению оператора решения уравнения Дарси: −∇ · (a(x) ∇u(x)) = f(x).
 
-## 15. Key Idea
+## 16. Результаты
 
-Instead of learning a function, the model learns an operator:
+Проект создает: training_plots/ (FFT анализ, визуализация предсказаний, сравнение экспериментов) и dataset_visualization/ (графики исследования датасетов).
 
-Gθ: a(x) → u(x)
+## 17. Запуск проекта
 
-This corresponds to learning the solution operator of the Darcy PDE:
-
-−∇ · (a(x) ∇u(x)) = f(x)
-
----
-
-## 16. Results
-
-The project produces:
-
-out/
-- FFT analysis
-- prediction visualization
-- experiment comparison
-
-dataset_visualization/
-- dataset inspection plots
-
----
-
-## 17. Running the Project
-
-Install dependencies:
-```
-
-pip install numpy matplotlib torch scipy h5py
-
-```
-
-Check dataset:
-```
-
-python check_data.py
-
-```
-
-Train model:
-```
-
-python fno_experiment.py
-
-```
+Установка зависимостей: pip install numpy matplotlib torch scipy h5py. Проверка датасета: python check_data.py. Обучение модели: python fno_experiment.py.
 
